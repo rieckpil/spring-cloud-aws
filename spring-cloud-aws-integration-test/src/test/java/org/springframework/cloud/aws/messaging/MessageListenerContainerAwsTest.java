@@ -30,14 +30,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cloud.aws.core.env.stack.StackResourceRegistry;
 import org.springframework.cloud.aws.core.support.documentation.RuntimeUse;
 import org.springframework.cloud.aws.messaging.listener.annotation.SqsListener;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(SpringExtension.class)
 abstract class MessageListenerContainerAwsTest extends AbstractContainerTest {
@@ -58,9 +56,6 @@ abstract class MessageListenerContainerAwsTest extends AbstractContainerTest {
 	@Autowired
 	private MessageReceiver messageReceiver;
 
-	@Autowired
-	private StackResourceRegistry stackResourceRegistry;
-
 	@BeforeEach
 	public void insertTotalNumberOfMessagesIntoTheLoadTestQueue()
 			throws InterruptedException {
@@ -68,7 +63,7 @@ abstract class MessageListenerContainerAwsTest extends AbstractContainerTest {
 
 		for (int batch = 0; batch < TOTAL_BATCHES; batch++) {
 			this.taskExecutor.execute(new QueueMessageSender(
-					this.stackResourceRegistry.lookupPhysicalResourceId("LoadTestQueue"),
+					amazonSqsClient.getQueueUrl("LoadTestQueue").getQueueUrl(),
 					this.amazonSqsClient, countDownLatch));
 		}
 
@@ -77,7 +72,8 @@ abstract class MessageListenerContainerAwsTest extends AbstractContainerTest {
 
 	@Test
 	void listenToAllMessagesUntilTheyAreReceivedOrTimeOut() throws Exception {
-		assertTrue(this.messageReceiver.getCountDownLatch().await(5, TimeUnit.MINUTES));
+		assertThat(this.messageReceiver.getCountDownLatch().await(5, TimeUnit.MINUTES))
+				.isTrue();
 	}
 
 	static class MessageReceiver {
@@ -87,7 +83,7 @@ abstract class MessageListenerContainerAwsTest extends AbstractContainerTest {
 		@RuntimeUse
 		@SqsListener("LoadTestQueue")
 		public void onMessage(String message) {
-			assertNotNull(message);
+			assertThat(message).isNotNull();
 			this.getCountDownLatch().countDown();
 		}
 
@@ -97,7 +93,7 @@ abstract class MessageListenerContainerAwsTest extends AbstractContainerTest {
 
 	}
 
-	private static class QueueMessageSender implements Runnable {
+	private static final class QueueMessageSender implements Runnable {
 
 		private final String queueUrl;
 
